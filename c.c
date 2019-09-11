@@ -16,7 +16,7 @@ static char ibus[IBUS_BUFFSIZE] = {0};
 static short rcValue[IBUS_MAXCHANNELS];
 const int pinBase = 300;
 const int i2caddres = 0x40;
-float freq = 400;
+float freq = 50;
 static int rxFrameDone;
 int fd;
 int fdd ;
@@ -73,7 +73,7 @@ int main ()
     return fd;
 }
 pca9685PWMReset(fd);
-  if ((fdd = serialOpen ("/dev/ttyAMA0", 115200)) < 0)
+  if ((fdd = serialOpen ("/dev/serial0", 115200)) < 0)
   {
     fprintf (stderr, "Unable to open serial device: %s\n", strerror (errno)) ;
     return 1 ;
@@ -85,12 +85,12 @@ pca9685PWMReset(fd);
   {
 	  readRx();
   if ( rxFrameDone ){
-    printf("%d\n",rcValue[2]);
+    printf("%d   ",rcValue[2]);
     br = (rcValue[2]-1000);
     bro = (br*0xFFF)/1000;
     printf("%d \n", bro);
     fflush(stdout);
-    pca9685PWMWrite(fd,0,(0xFFF-bro),bro);
+    pca9685PWMWrite(fd,0,0,bro);
     delay(2);
     }
   }
