@@ -29,7 +29,7 @@ float gyr[3] = {0};
 float u1, u2, u3, u4;
 long int tpocetak;
 struct timespec gettime_now;
-long int dt, time_senzor;
+long int time_senzor;
 
 void readRx(); //fun za citanje sa serijske
 void min_max(float rp, float *prp);
@@ -45,6 +45,7 @@ int main()
 	float rpm1, rpm2, rpm3, rpm4;
 	float m = 1.6, g = 9.81, ix = 0.72, iy = 0.69;
 	int pwm1, pwm2, pwm3, pwm4;
+	long double dt_long_double;
 
 	wiringPiSetup();
 	init_imu();
@@ -93,15 +94,27 @@ int main()
 			get_imu_reading(acc, gyr); //citanje senzora
 
 			clock_gettime(CLOCK_REALTIME, &gettime_now);
-			dt = (gettime_now.tv_nsec - time_senzor); //printf("%ld\n",dt);
-			if (dt < 0)
+			/*
+				dt ti je bio tipa long int tj. long samo
+				gettime_now.tv_nsec je isti tip kao i time_senzor
+				oni mogu drzati brojeve vece od 10^9 ali primjeti da razlika ta dva broja koju
+				spremas u dt varijablu rijetko kada bude veca od 10^9 (vjerojatno nikada)
+				tada imas broj koji je tipa long int i manji od 10^9 i dijelis ga sa 10^9
+				to je u stvarnosti 0.nest ali takav rezultat se u intu zaokruzuje u 0
+				tek nakon toga svega si pretvarao taj rezultat u double sto je opet 0
+
+				prvo oduzmes, razliku pretvoris u float/double i tek onda dijelis
+			*/
+			dt_long_double = gettime_now.tv_nsec -time_senzor; // oduzimaju se kao long int i pri dodjeljivanju postaju double (automatski cast)
+			// bar bi tako trebalo biti
+			if (dt_long_double < 0)
 			{
-				dt += 1000000000;
+				dt_long_double += 1000000000;
 			}
 		}
 		time_senzor = gettime_now.tv_nsec;
 
-		t = (long double)dt / 1000000000;
+		t = (long double)dt_long_double / 1000000000;
 		printf("vrijeme u s %Lf\n", t);
 		//	acc[0] =acc[0]-bax; acc[1]= acc[1]-bay; acc[2]= acc[2]-baz; gyr[0]= gyr[0]-bgx; gyr[1]=gyr[1]-bgy; gyr[2]=gyr[2]-bgz; //ako micem bias
 
