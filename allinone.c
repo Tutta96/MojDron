@@ -22,25 +22,33 @@ static char ibus[IBUS_BUFFERSIZE] = {0};
 static short rcValue[IBUS_MAXCHANNELS];
 static float ref[4];
 static int rxFrameDone;
-int fds,fd,i;
-float f1,f2,f3,f4,c,b;
+long double t;
+int fds,fd,i,j = 0;
+float c,b;
 float acc[3] = {0};
 float gyr[3] = {0};
-float bax=0.0474, bay=-0.1295, baz=0.3044, bgx=1.2099, bgy=1.1932, bgz=0.2329; //biasi senzora
-float vx=0,vy=0,vz=0;
 float u1,u2,u3,u4;
-float phi=0, theta=0, psi=0;
-long int time_senzor;
-long int dt,tpocetak;
+long int tpocetak;
 struct timespec gettime_now;
-float Phi=0,Theta=0,Psi=0;
-float m = 1.7, g=9.81, ix=0.72,iy=0.69;
+long int dt,time_senzor;
+
 
 
 void readRx(); //fun za citanje sa serijske
+void min_max(float rp,float* prp);
+void rpm_PWM(float rpm1,float rpm2,float rpm3,float rpm4,int* p1,int*p2,int* p3,int*p4);
+void uprav_u_RPM(float u1,float u2,float u3,float u4,float* r1,float* r2,float* r3,float* r4);
+void chill();
 
 int main()
 {
+	float Phi=0, Theta=0, Psi=0;
+//	float bax=0.0474, bay=-0.1295, baz=0.3044, bgx=1.2099, bgy=1.1932, bgz=0.2329; //biasi senzora
+	float vx=0,vy=0,vz=0;
+	float rpm1,rpm2,rpm3,rpm4;
+	float m = 1.6, g=9.81, ix=0.72,iy=0.69;
+	int pwm1,pwm2,pwm3,pwm4;
+
 	wiringPiSetup();
 	init_imu();
 
@@ -50,8 +58,7 @@ int main()
 	if((fds = serialOpen ("/dev/serial0", 115200)) < 0)
 	{
 		fprintf(stderr, "ne dela serija: %s\n",strerror (errno));
-		digitalWrite(0, HIGH); delay(500);
-		digitalWrite(0, LOW); delay(500);
+		digitalWrite(0, HIGH); delay(500);		digitalWrite(0, LOW); delay(500);
 		return 1;
 	}
 	init_imu();
@@ -61,64 +68,100 @@ int main()
 		digitalWrite(1, HIGH); delay(500);
 		digitalWrite(1, LOW); delay(500);
 	}
-	clock_gettime(CLOCK_REALTIME, &gettime_now);
+	clock_gettime(CLOCK_REALTIME,&gettime_now);
 	time_senzor = gettime_now.tv_nsec;
-
 
    for(;;)
     {
 	readRx();
         if(rxFrameDone == 1 && rcValue[5] == 1000){
-                pca9685PWMWrite(fd,0,0,0x700);
-                pca9685PWMWrite(fd,1,0,0x700);
-                pca9685PWMWrite(fd,2,0,0x700);
-                pca9685PWMWrite(fd,3,0,0x700);
-		rxFrameDone = 0;
-		                }
-
+		chill();
+		 }
 
 	if(rxFrameDone == 1 && rcValue[5]== 2000)
-	{         clock_gettime(CLOCK_REALTIME,&gettime_now);
-		 tpocetak=gettime_now.tv_nsec; //da vidim kolko traje
+	{        // clock_gettime(CLOCK_REALTIME,&gettime_now);
+		// tpocetak=gettime_now.tv_nsec; //da vidim kolko traje
 		for(i=0;i<4;i++){    //Skaliranje ulaza s rc-a na referentne brzine +/- 0.5m/s(rad/s)
 			ref[i] = ((float)(rcValue[i] - 1500)) / 1000 ;
 			}
 		get_imu_reading(acc, gyr); //citanje senzora
+
 		clock_gettime(CLOCK_REALTIME,&gettime_now);
-		dt= (gettime_now.tv_nsec - time_senzor)/1000000000;printf("%ld\n",dt);
-		if(dt<0){
-			dt=8588888/1000000000;
-			}
-		time_senzor = gettime_now.tv_nsec;
-	//	acc[0] =acc[0]-bax; acc[1]= acc[1]-bay; acc[2]= acc[2]-baz; gyr[0]= gyr[0]-bgx; gyr[1]=gyr[1]-bgy; gyr[2]=gyr[2]-bgz;
-		vx = vx+acc[0]*dt; vy = vy+acc[1]*dt; vz = vz+acc[2]*dt; //integriranje akceleracija
-		Phi = 0.9*(Phi+(gyr[0]*dt*3.14/180))+0.1*acc[1]/acc[3]; //complementarni za kuteve
-		Theta = 0.9*(Theta + gyr[1]*dt*3.14/180)+ 0.1*(-1)*acc[0]/sqrt(pow(acc[1],2)+pow(acc[2],2));
-		Psi = psi + gyr[2]*dt*3.14/180;
+ 		dt= (gettime_now.tv_nsec - time_senzor); //printf("%ld\n",dt);
+        	if(dt<0){
+                	dt+=1000000000;}                  }
+        	time_senzor = gettime_now.tv_nsec;
+
+		t = (long double)dt /1000000000;
+		printf("vrijeme u s %Lf\n",t);
+	//	acc[0] =acc[0]-bax; acc[1]= acc[1]-bay; acc[2]= acc[2]-baz; gyr[0]= gyr[0]-bgx; gyr[1]=gyr[1]-bgy; gyr[2]=gyr[2]-bgz; //ako micem bias
+		
+		vx = vx+acc[0]*t; vy = vy+acc[1]*t; vz = vz+acc[2]*t; //integriranje akceleracija
+		Phi = 0.9* ( Phi + ( gyr[0] * t * M_PI / 180)) + 0.1 * acc[1] / acc[3]; //complementarni za kuteve
+		Theta = 0.9* ( Theta + gyr[1] * t * M_PI/180) + 0.1 * ( -1) *acc[0]/sqrt( pow(acc[1],2) + pow( acc[2],2));
+		Psi = Psi + gyr[2] * t * M_PI/180;
+		
 		u1 = -KP*(vz-ref[2])+ m*g;//zakon upravljanja, U1,U2,U3,U4
 		u2 = -ix/g +(-KK2*(-g*gyr[0])-KK1*(-g*Phi)-KK0*(vy-ref[0]));
 		u3 = iy/g +(-KK2*(g*gyr[1])-KK1*(g*Theta)-KK0*(vx-ref[1]));
 		u4 = -1*(KP*(gyr[3]-ref[3]));
-		f1 = 0.25*u1-0.0016*u3+2.5+u4;
-		c = f1/2.5/100000;//racuna sile i pwm
-		b = sqrt(c);
-		//f2=(sqrt((0.25*u1-0.0016*u2-2.5+u4)/2.5/100000))/7814.1;
- 		//f3=(sqrt((0.25*u1+0.0016*u3+2.5+u4)/2.5/100000))/7814.1;
-		//f4=(sqrt((0.25*u1+0.0016*u2-2.5+u4)/2.5/100000))/7814.4;
-		pca9685PWMWrite(fd,0,0,(0x800+0x7FF*(int)(f1))); //iBus output za motore
-		//pca9685PWMWrite(fd,1,0,(int)(0x800+0x7FF*f2));
-		//pca9685PWMWrite(fd,2,0,(int)(0x800+0x7FF*f3));
-		//pca9685PWMWrite(fd,3,0,(int)(0x800+0x7FF*f4));
-	clock_gettime(CLOCK_REALTIME,&gettime_now);
-	printf("u1,u2,u3,u4 %f,%f,%f,%f\n#f1= %f\n %f\n %f\n\n ",u1,u2,u3,u4,f1,c,b );
-	fflush(stdout);
+		
+		uprav_u_RPM(u1,u2,u3,u4,&rpm1,&rpm2,&rpm3,&rpm4);//racuna U u RPM
+		
+		rpm_PWM(rpm1,rpm2,rpm3,rpm4,&pwm1,&pwm2,&pwm3,&pwm4);
+		printf("pwm za ibus %d",pwm1);
+		pca9685PWMWrite(fd,0,0,2047+pwm1); //iBus output za motore
+		pca9685PWMWrite(fd,1,0,2047+pwm2);
+		pca9685PWMWrite(fd,2,0,2047+pwm3);
+		pca9685PWMWrite(fd,3,0,2047+pwm4);
+	//clock_gettime(CLOCK_REALTIME,&gettime_now);
+	//printf("u1,u2,u3,u4 %f,%f,%f,%f\n#f1= %f\n %f\n %f\n\n ",u1,u2,u3,u4,f1,c,b );
+	//fflush(stdout);
 	}
     }
 }
 
 
 //FUNKCIJE
+void min_max(float rp,float* prp){
+	if(rp<=100){*prp=100;}
+	if(rp>=8700){*prp=8700;}
+	else{*prp = rp;}
+}
+void rpm_PWM(float rpm1,float rpm2,float rpm3,float rpm4,int* p1,int*p2,int* p3,int*p4){
+	min_max(rpm1,&rpm1);
+	*p1 = (int)((rpm1-100)*4.2);
+	*p2 = (int)((rpm2-100)*4.2);
+	*p3 = (int)((rpm3-100)*4.2);
+	*p4 = (int)((rpm4-100)*4.2);
 
+}
+
+void uprav_u_RPM(float u1,float u2,float u3,float u4,float* r1,float* r2,float* r3,float* r4){
+	float f1,f2,f3,f4;
+	double fc1,fc2,fc3,fc4;
+	f1 = 0.25*u1-0.0016*u3+2.5*u4;   printf("Sila1 %f\n",f1);
+	f2 = 0.25*u1-0.0016*u2-2.5*u4;
+	f3 = 0.25*u1+0.0016*u3+2.5*u4;
+	f4 = 0.25*u1+0.0016*u2-2.5*u4;
+	fc1 = f1/(double)(8/1000000);
+        fc2 = f2/(double)(8/1000000);
+        fc3 = f3/(double)(8/1000000);
+        fc4 = f4/(double)(8/1000000);
+	*r1 = sqrt(fc1);
+        *r2 = sqrt(fc2);
+        *r3 = sqrt(fc3);
+        *r4 = sqrt(fc4);
+}
+
+
+void chill(){
+	 pca9685PWMWrite(fd,0,0,2040);
+         pca9685PWMWrite(fd,1,0,2040);
+         pca9685PWMWrite(fd,2,0,2040);
+         pca9685PWMWrite(fd,3,0,2040);
+         rxFrameDone = 0;
+}
 
 void readRx()
 {
