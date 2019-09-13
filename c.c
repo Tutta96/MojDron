@@ -68,7 +68,7 @@ void readRx()
 int main ()
 {
   wiringPiSetup();
- if((fd = pca9685Setup(300,0x40,500)) < 0)
+ if((fd = pca9685Setup(300,0x40,50)) < 0)
  {   printf("Ne dela");
     return fd;
 }
@@ -87,10 +87,10 @@ pca9685PWMReset(fd);
   if ( rxFrameDone ){
     printf("%d   ",rcValue[2]);
     br = (rcValue[2]-1000);
-    bro = (br*0xFFF)/1000;
+    bro = (br*204)/1000;
     printf("%d \n", bro);
     fflush(stdout);
-    pca9685PWMWrite(fd,0,0,bro);
+    pca9685PWMWrite(fd,3,0,(204+bro));
     delay(2);
     }
   }

@@ -65,7 +65,7 @@ int main()
 		return 1;
 	}
 	init_imu();
-	if ((fd = pca9685Setup(300, 0x40, 50)) < 0)
+	if ((fd = pca9685Setup(300, 0x40, 500)) < 0)
 	{
 		fprintf(stderr, "i2c do pwm ne dela");
 		digitalWrite(1, HIGH);
@@ -111,29 +111,31 @@ int main()
 			{
 				dt_long_double += 1000000000;
 			}
-		}
+		
 		time_senzor = gettime_now.tv_nsec;
 
-		t = (long double)dt_long_double / 1000000000;
-		printf("vrijeme u s %Lf\n", t);
+		t = dt_long_double / 1000000000;
+		//printf("vrijeme u s %Lf\n", t);
 		//	acc[0] =acc[0]-bax; acc[1]= acc[1]-bay; acc[2]= acc[2]-baz; gyr[0]= gyr[0]-bgx; gyr[1]=gyr[1]-bgy; gyr[2]=gyr[2]-bgz; //ako micem bias
 
 		vx = vx + acc[0] * t;
 		vy = vy + acc[1] * t;
-		vz = vz + acc[2] * t;												   //integriranje akceleracija
-		Phi = 0.9 * (Phi + (gyr[0] * t * M_PI / 180)) + 0.1 * acc[1] / acc[3]; //complementarni za kuteve
-		Theta = 0.9 * (Theta + gyr[1] * t * M_PI / 180) + 0.1 * (-1) * acc[0] / sqrt(pow(acc[1], 2) + pow(acc[2], 2));
+		vz = vz + (acc[2]-9.9) * t;												   //integriranje akceleracija
+		//printf("\n brzina po Z: %f",vz);
+		Phi = 0.95 * (Phi + (gyr[0] * t * M_PI / 180)) + 0.15 * acc[1] / acc[3]; //complementarni za kuteve
+		Theta = 0.85 * (Theta + gyr[1] * t * M_PI / 180) + 0.15 * (-1) * acc[0] / sqrt(pow(acc[1], 2) + pow(acc[2], 2));
 		Psi = Psi + gyr[2] * t * M_PI / 180;
-
+		//printf("kutevi: %f  ,%f,  %f",Phi,Theta,Psi);
 		u1 = -KP * (vz - ref[2]) + m * g; //zakon upravljanja, U1,U2,U3,U4
-		u2 = -ix / g + (-KK2 * (-g * gyr[0]) - KK1 * (-g * Phi) - KK0 * (vy - ref[0]));
-		u3 = iy / g + (-KK2 * (g * gyr[1]) - KK1 * (g * Theta) - KK0 * (vx - ref[1]));
+		u2 = -ix / g * (-KK2 * (-g * gyr[0]) - KK1 * (-g * Phi) - KK0 * (vy - ref[0]));
+		u3 = iy / g * (-KK2 * (g * gyr[1]) - KK1 * (g * Theta) - KK0 * (vx - ref[1]));
 		u4 = -1 * (KP * (gyr[3] - ref[3]));
-
+		//printf("\nupravljacke: U1_%f  ,U2_%f  ,U3%f  ,U4 %f",u1,u2,u3,u4);
 		uprav_u_RPM(u1, u2, u3, u4, &rpm1, &rpm2, &rpm3, &rpm4); //racuna U u RPM
-
+		//printf("\nRPMzeljeni: rpm1_%f  ,2_ %f  ,3  %f  ,4 %f",rpm1,rpm2,rpm3,rpm4);
 		rpm_PWM(rpm1, rpm2, rpm3, rpm4, &pwm1, &pwm2, &pwm3, &pwm4);
-		printf("pwm za ibus %d", pwm1);
+		
+		printf("\npwm za ibus %d %d %d %d", pwm1, pwm2, pwm3, pwm4);
 		pca9685PWMWrite(fd, 0, 0, 2047 + pwm1); //iBus output za motore
 		pca9685PWMWrite(fd, 1, 0, 2047 + pwm2);
 		pca9685PWMWrite(fd, 2, 0, 2047 + pwm3);
@@ -141,6 +143,7 @@ int main()
 		//clock_gettime(CLOCK_REALTIME,&gettime_now);
 		//printf("u1,u2,u3,u4 %f,%f,%f,%f\n#f1= %f\n %f\n %f\n\n ",u1,u2,u3,u4,f1,c,b );
 		//fflush(stdout);
+		}
 	}
 }
 
@@ -174,14 +177,15 @@ void uprav_u_RPM(float u1, float u2, float u3, float u4, float *r1, float *r2, f
 	float f1, f2, f3, f4;
 	double fc1, fc2, fc3, fc4;
 	f1 = 0.25 * u1 - 0.0016 * u3 + 2.5 * u4;
-	printf("Sila1 %f\n", f1);
 	f2 = 0.25 * u1 - 0.0016 * u2 - 2.5 * u4;
 	f3 = 0.25 * u1 + 0.0016 * u3 + 2.5 * u4;
 	f4 = 0.25 * u1 + 0.0016 * u2 - 2.5 * u4;
-	fc1 = f1 / (double)(8 / 1000000);
-	fc2 = f2 / (double)(8 / 1000000);
-	fc3 = f3 / (double)(8 / 1000000);
-	fc4 = f4 / (double)(8 / 1000000);
+	fc1 = f1 /8 * 1000000;
+	fc2 = f2 /8 * 1000000;
+	fc3 = f3 /8* 1000000;
+	fc4 = f4 /8 * 1000000;
+	 printf("\nomeg21 %f\n", fc1); printf("omeg23 %f\n", fc3);
+	 printf("Sila3 %f\n", f3); printf("Sila1 %f\n", f1); printf("Sila2 %f\n", f2); printf("Sila4 %f\n", f4);
 	*r1 = sqrt(fc1);
 	*r2 = sqrt(fc2);
 	*r3 = sqrt(fc3);
