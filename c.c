@@ -90,7 +90,7 @@ pca9685PWMReset(fd);
     bro = (br*204)/1000;
     printf("%d \n", bro);
     fflush(stdout);
-    pca9685PWMWrite(fd,3,0,(204+bro));
+    pca9685PWMWrite(fd,3,0,(205+bro));
     delay(2);
     }
   }

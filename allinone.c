@@ -33,8 +33,8 @@ long int time_senzor;
 
 void readRx(); //fun za citanje sa serijske
 void min_max(float rp, float *prp);
-void rpm_PWM(float rpm1, float rpm2, float rpm3, float rpm4, int *p1, int *p2, int *p3, int *p4);
-void uprav_u_RPM(float u1, float u2, float u3, float u4, float *r1, float *r2, float *r3, float *r4);
+//void rpm_PWM(float rpm1, float rpm2, float rpm3, float rpm4, int *p1, int *p2, int *p3, int *p4);
+void uprav_u_PWM(float u1, float u2, float u3, float u4, int *r1, int *r2, int *r3, int *r4);
 void chill();
 
 int main()
@@ -42,7 +42,7 @@ int main()
 	float Phi = 0, Theta = 0, Psi = 0;
 	//	float bax=0.0474, bay=-0.1295, baz=0.3044, bgx=1.2099, bgy=1.1932, bgz=0.2329; //biasi senzora
 	float vx = 0, vy = 0, vz = 0;
-	float rpm1, rpm2, rpm3, rpm4;
+	//float rpm1, rpm2, rpm3, rpm4;
 	float m = 1.6, g = 9.81, ix = 0.72, iy = 0.69;
 	int pwm1, pwm2, pwm3, pwm4;
 	long double dt_long_double;
@@ -65,7 +65,7 @@ int main()
 		return 1;
 	}
 	init_imu();
-	if ((fd = pca9685Setup(300, 0x40, 500)) < 0)
+	if ((fd = pca9685Setup(300, 0x40, 50)) < 0)
 	{
 		fprintf(stderr, "i2c do pwm ne dela");
 		digitalWrite(1, HIGH);
@@ -131,15 +131,15 @@ int main()
 		u3 = iy / g * (-KK2 * (g * gyr[1]) - KK1 * (g * Theta) - KK0 * (vx - ref[1]));
 		u4 = -1 * (KP * (gyr[3] - ref[3]));
 		//printf("\nupravljacke: U1_%f  ,U2_%f  ,U3%f  ,U4 %f",u1,u2,u3,u4);
-		uprav_u_RPM(u1, u2, u3, u4, &rpm1, &rpm2, &rpm3, &rpm4); //racuna U u RPM
+		uprav_u_PWM(u1, u2, u3, u4, &pwm1, &pwm2, &pwm3, &pwm4); //racuna U u PWM
 		//printf("\nRPMzeljeni: rpm1_%f  ,2_ %f  ,3  %f  ,4 %f",rpm1,rpm2,rpm3,rpm4);
-		rpm_PWM(rpm1, rpm2, rpm3, rpm4, &pwm1, &pwm2, &pwm3, &pwm4);
+		//rpm_PWM(rpm1, rpm2, rpm3, rpm4, &pwm1, &pwm2, &pwm3, &pwm4);
 		
-		printf("\npwm za ibus %d %d %d %d", pwm1, pwm2, pwm3, pwm4);
-		pca9685PWMWrite(fd, 0, 0, 2047 + pwm1); //iBus output za motore
-		pca9685PWMWrite(fd, 1, 0, 2047 + pwm2);
-		pca9685PWMWrite(fd, 2, 0, 2047 + pwm3);
-		pca9685PWMWrite(fd, 3, 0, 2047 + pwm4);
+	//	printf("\npwm za ibus %d %d %d %d", pwm1, pwm2, pwm3, pwm4);
+		pca9685PWMWrite(fd, 0, 0, 205 + pwm1); //iBus output za motore
+		pca9685PWMWrite(fd, 1, 0, 205 + pwm2);
+		pca9685PWMWrite(fd, 2, 0, 205 + pwm3);
+		pca9685PWMWrite(fd, 3, 0, 205 + pwm4);
 		//clock_gettime(CLOCK_REALTIME,&gettime_now);
 		//printf("u1,u2,u3,u4 %f,%f,%f,%f\n#f1= %f\n %f\n %f\n\n ",u1,u2,u3,u4,f1,c,b );
 		//fflush(stdout);
@@ -150,37 +150,46 @@ int main()
 //FUNKCIJE
 void min_max(float rp, float *prp)
 {
-	if (rp <= 100)
+	if (rp <= 1)
 	{
-		*prp = 100;
+		*prp = 1;
 	}
-	if (rp >= 8700)
+	if (rp >= 10)
 	{
-		*prp = 8700;
+		*prp = 10;
 	}
 	else
 	{
 		*prp = rp;
 	}
 }
-void rpm_PWM(float rpm1, float rpm2, float rpm3, float rpm4, int *p1, int *p2, int *p3, int *p4)
+/*void rpm_PWM(float rpm1, float rpm2, float rpm3, float rpm4, int *p1, int *p2, int *p3, int *p4)
 {
 	min_max(rpm1, &rpm1);
 	*p1 = (int)((rpm1 - 100) * 4.2);
 	*p2 = (int)((rpm2 - 100) * 4.2);
 	*p3 = (int)((rpm3 - 100) * 4.2);
 	*p4 = (int)((rpm4 - 100) * 4.2);
-}
+}*/
 
-void uprav_u_RPM(float u1, float u2, float u3, float u4, float *r1, float *r2, float *r3, float *r4)
+void uprav_u_PWM(float u1, float u2, float u3, float u4, int *r1, int *r2, int *r3, int *r4)
 {
 	float f1, f2, f3, f4;
-	double fc1, fc2, fc3, fc4;
+	//double fc1, fc2, fc3, fc4;
 	f1 = 0.25 * u1 - 0.0016 * u3 + 2.5 * u4;
 	f2 = 0.25 * u1 - 0.0016 * u2 - 2.5 * u4;
 	f3 = 0.25 * u1 + 0.0016 * u3 + 2.5 * u4;
 	f4 = 0.25 * u1 + 0.0016 * u2 - 2.5 * u4;
-	fc1 = f1 /8 * 1000000;
+	min_max(f1,&f1);
+        min_max(f2,&f2);
+        min_max(f3,&f3);
+        min_max(f4,&f4);
+	*r1 = f1*20.4;
+        *r2 = f2*20.4;
+        *r3 = f3*20.4;
+        *r4 = f4*20.4;
+
+	/*fc1 = f1 /8 * 1000000;
 	fc2 = f2 /8 * 1000000;
 	fc3 = f3 /8* 1000000;
 	fc4 = f4 /8 * 1000000;
@@ -189,7 +198,7 @@ void uprav_u_RPM(float u1, float u2, float u3, float u4, float *r1, float *r2, f
 	*r1 = sqrt(fc1);
 	*r2 = sqrt(fc2);
 	*r3 = sqrt(fc3);
-	*r4 = sqrt(fc4);
+	*r4 = sqrt(fc4);*/
 }
 
 void chill()
